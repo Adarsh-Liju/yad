@@ -1,0 +1,3 @@
+https://www.lipsum.com/feed/sample.pdf
+https://www.lipsum.com/feed/html
+https://www.lipsum.com/feed/xml
