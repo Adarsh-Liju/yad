@@ -1,0 +1,7 @@
+{
+    "OutputDir": "downloads",
+    "RateLimit": 5.0,
+    "MaxRetries": 3,
+    "MaxParallel": 5,
+    "UrlFile": "urls.txt"
+}

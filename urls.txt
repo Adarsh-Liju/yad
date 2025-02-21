@@ -1,8 +1,5 @@
 https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf
-
 https://www.gutenberg.org/files/1065/1065-0.txt
 https://www.gutenberg.org/cache/epub/84/pg84.txt
-
-
 https://people.sc.fsu.edu/~jburkardt/data/csv/cities.csv
 https://people.sc.fsu.edu/~jburkardt/data/csv/grades.csv
