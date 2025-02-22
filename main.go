@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"bufio"
 	"strings"
+	"github.com/cheggaaa/pb/v3"
 )
 
 func download(url, outputDir string) error {
@@ -72,12 +73,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Download each URL.
+	// Download each URL with a progress bar.
+	bar := pb.StartNew(len(urls))
 	for _, u := range urls {
+		bar.Increment()
 		if err := download(u, *outputDir); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to download %s: %v\n", u, err)
 		} else {
 			fmt.Printf("Downloaded %s successfully\n", u)
 		}
 	}
+	bar.Finish()
 }
