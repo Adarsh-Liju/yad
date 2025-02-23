@@ -1,16 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"bufio"
 	"strings"
-	"github.com/cheggaaa/pb/v3"
+	"sync"
 )
+
+const maxWorkers = 5
 
 func download(url, outputDir string) error {
 	resp, err := http.Get(url)
@@ -18,6 +21,10 @@ func download(url, outputDir string) error {
 		return fmt.Errorf("error downloading %s: %w", url, err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error downloading %s: received status code %d", url, resp.StatusCode)
+	}
 
 	filePath := filepath.Join(outputDir, filepath.Base(url))
 	out, err := os.Create(filePath)
@@ -32,30 +39,38 @@ func download(url, outputDir string) error {
 	return nil
 }
 
+func worker(urls <-chan string, outputDir string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for url := range urls {
+		if err := download(url, outputDir); err != nil {
+			log.Printf("Failed to download %s: %v\n", url, err)
+		} else {
+			log.Printf("Downloaded %s successfully\n", url)
+		}
+	}
+}
 
 func main() {
-	outputDir := flag.String("outputDir", "", "Output directory")
-	urlsFile := flag.String("urls", "", "File containing URLs (one per line)")
+	outputDir := flag.String("o", "", "Output directory")
+	urlsFile := flag.String("u", "", "File containing URLs (one per line)")
 	flag.Parse()
 
 	// Check required flags.
 	if *outputDir == "" || *urlsFile == "" {
-		fmt.Println("Both -outputDir and -urls flags are required.")
+		log.Println("Both -o and -u flags are required.")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	// Create the output directory if it doesn't exist.
 	if err := os.MkdirAll(*outputDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error creating output directory: %v\n", err)
 	}
 
 	// Open the file containing URLs.
 	file, err := os.Open(*urlsFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening URLs file: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error opening URLs file: %v\n", err)
 	}
 	defer file.Close()
 
@@ -69,19 +84,27 @@ func main() {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading URLs file: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error reading URLs file: %v\n", err)
 	}
 
-	// Download each URL with a progress bar.
-	bar := pb.StartNew(len(urls))
-	for _, u := range urls {
-		bar.Increment()
-		if err := download(u, *outputDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to download %s: %v\n", u, err)
-		} else {
-			fmt.Printf("Downloaded %s successfully\n", u)
-		}
+	// Create a channel to distribute URLs to workers.
+	urlChan := make(chan string, len(urls))
+	log.Println("Starting workers...")
+	var wg sync.WaitGroup
+
+	// Start worker goroutines.
+	for range maxWorkers {
+		wg.Add(1)
+		go worker(urlChan, *outputDir, &wg)
 	}
-	bar.Finish()
+
+	// Send URLs to the channel.
+	for _, url := range urls {
+		urlChan <- url
+	}
+	close(urlChan)
+
+	// Wait for all workers to finish.
+	wg.Wait()
+	log.Println("All downloads completed.")
 }
