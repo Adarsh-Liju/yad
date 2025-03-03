@@ -11,11 +11,62 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"github.com/anacrolix/torrent"
+	"time"
 )
 
 const workers int = 5
 
-func download(url, outputDir string) error {
+func downloadTorrent(url, outputDir string) error {
+	// Configure the torrent client with reasonable defaults
+	config := torrent.NewDefaultClientConfig()
+	config.DataDir = outputDir
+	config.Seed = false // Don't seed after download completes
+	config.NoUpload = true // Don't upload while downloading
+
+	client, err := torrent.NewClient(config)
+	if err != nil {
+		return fmt.Errorf("failed to create torrent client: %w", err)
+	}
+	defer client.Close()
+
+	t, err := client.AddMagnet(url)
+	if err != nil {
+		return fmt.Errorf("failed to add magnet URL: %w", err)
+	}
+
+	// Set a reasonable timeout for getting torrent info
+	infoTimeout := 1 * time.Minute
+	select {
+	case <-t.GotInfo():
+	case <-time.After(infoTimeout):
+		return fmt.Errorf("timeout waiting for torrent info after %v", infoTimeout)
+	}
+
+	t.DownloadAll()
+
+	// Add progress reporting and better completion check
+	downloadStart := time.Now()
+	for !t.Complete().Bool() {
+		stats := t.Stats()
+		progress := float64(stats.BytesRead.Int64()) / float64(t.Length()) * 100
+		speed := float64(stats.BytesRead.Int64()) / time.Since(downloadStart).Seconds() / 1024 / 1024 // MB/s
+
+		log.Printf("Downloading torrent: %.1f%% complete (%.2f MB/s)", progress, speed)
+
+		// Check if download is stuck
+		if stats.ActivePeers == 0 {
+			return fmt.Errorf("download stalled - no active peers")
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	log.Printf("Torrent download completed in %v", time.Since(downloadStart))
+	return nil
+}
+
+func normalDownload(url, outputDir string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %w", url, err)
@@ -47,7 +98,14 @@ func processURLs(urls []string, outputDir string) {
 		go func() {
 			defer wg.Done()
 			for url := range urlChan {
-				if err := download(url, outputDir); err != nil {
+				// if url is torrent magnet send it to other function
+				if strings.HasPrefix(url, "magnet:") {
+					if err := downloadTorrent(url, outputDir); err != nil {
+						log.Printf("Error downloading torrent: %v", err)
+					}
+					continue
+				}
+				if err := normalDownload(url, outputDir); err != nil {
 					log.Printf("Error: %v", err)
 				} else {
 					log.Printf("Successfully downloaded %s", url)
