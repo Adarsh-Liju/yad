@@ -34,7 +34,7 @@ A cross-platform desktop application built with Go and Fyne that allows users to
 
 ### Main UI
 
-![yad_ui](./yad.png)
+![yad_ui](./yad_main.png)
 
 ### Download UI
 
