@@ -50,7 +50,7 @@ func downloadTorrent(url, outputDir string) error {
 	for !t.Complete().Bool() {
 		stats := t.Stats()
 		progress := float64(stats.BytesRead.Int64()) / float64(t.Length()) * 100
-		speed := float64(stats.BytesRead.Int64()) / time.Since(downloadStart).Seconds() / 1024 / 1024 // MB/s
+		speed := float64(stats.BytesRead.Int64()) / time.Since(downloadStart).Seconds() / 1024 / 1024 // MB/xs
 
 		log.Printf("Downloading torrent: %.1f%% complete (%.2f MB/s)", progress, speed)
 
