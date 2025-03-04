@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -24,7 +25,7 @@ const workers int = 5
 func main() {
 	// Create a new Fyne application
 	myApp := app.New()
-	myWindow := myApp.NewWindow("Download Manager")
+	myWindow := myApp.NewWindow("Yad - Yet Another Downloader")
 
 	// Create UI elements
 	outputDirEntry := widget.NewEntry()
@@ -34,7 +35,7 @@ func main() {
 	urlsEntry.SetPlaceHolder("Enter URLs or Magnet Links (one per line)...")
 
 	// Button to open folder selection dialog
-	selectDirButton := widget.NewButton("Select Directory", func() {
+	selectDirButton := widget.NewButtonWithIcon("Select Directory", theme.FolderOpenIcon(), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				log.Println("Error selecting directory:", err)
@@ -46,28 +47,38 @@ func main() {
 		}, myWindow)
 	})
 
-	startButton := widget.NewButton("Start Download", func() {
+	startButton := widget.NewButtonWithIcon("Start Download", theme.DownloadIcon(), func() {
 		outputDir := outputDirEntry.Text
 		urls := strings.Split(urlsEntry.Text, "\n") // Split URLs by newline
 		if outputDir == "" || len(urls) == 0 {
-			log.Println("Please provide both output directory and at least one URL/magnet link")
+			dialog.ShowInformation("Error", "Please provide both output directory and at least one URL/magnet link", myWindow)
 			return
 		}
 		go startDownload(urls, outputDir, myWindow)
 	})
 
+	clearButton := widget.NewButtonWithIcon("Clear", theme.DeleteIcon(), func() {
+		outputDirEntry.SetText("")
+		urlsEntry.SetText("")
+	})
+
+	// Create a status bar
+	statusBar := widget.NewLabel("Ready")
+
 	// Create a vertical box layout for the UI
 	content := container.NewVBox(
+		widget.NewLabelWithStyle("Yad - Yet Another Downloader", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewLabel("Output Directory:"),
-		container.NewHBox(outputDirEntry, selectDirButton),
+		container.NewBorder(nil, nil, nil, selectDirButton, outputDirEntry),
 		widget.NewLabel("URLs or Magnet Links (one per line):"),
 		urlsEntry,
-		startButton,
+		container.NewHBox(startButton, clearButton),
+		statusBar,
 	)
 
 	// Set the window content and show it
 	myWindow.SetContent(content)
-	myWindow.Resize(fyne.NewSize(600, 400)) // Larger window to accommodate progress bars
+	myWindow.Resize(fyne.NewSize(1200, 800)) // Larger window to accommodate progress bars
 	myWindow.ShowAndRun()
 }
 
@@ -82,7 +93,7 @@ func startDownload(urls []string, outputDir string, window fyne.Window) {
 	}
 
 	if len(validURLs) == 0 {
-		log.Println("No valid URLs/magnet links provided")
+		dialog.ShowInformation("Error", "No valid URLs/magnet links provided", window)
 		return
 	}
 
@@ -93,7 +104,7 @@ func startDownload(urls []string, outputDir string, window fyne.Window) {
 
 	// Add progress bars to the window
 	window.SetContent(container.NewVBox(
-		widget.NewLabel("Download Progress:"),
+		widget.NewLabelWithStyle("Download Progress:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		progressContainer,
 	))
 
