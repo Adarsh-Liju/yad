@@ -79,12 +79,6 @@ A cross-platform desktop application built with Go and Fyne that allows users to
 
 ---
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
 ## Acknowledgments
 
 - **[Fyne](https://fyne.io/)** for providing an easy-to-use GUI framework.
