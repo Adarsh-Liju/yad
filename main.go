@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,149 +9,237 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"github.com/anacrolix/torrent"
 	"time"
+
+	"github.com/anacrolix/torrent"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
 )
 
 const workers int = 5
 
-func downloadTorrent(url, outputDir string) error {
-	// Configure the torrent client with reasonable defaults
-	config := torrent.NewDefaultClientConfig()
-	config.DataDir = outputDir
-	config.Seed = false // Don't seed after download completes
-	config.NoUpload = true // Don't upload while downloading
+func main() {
+	// Create a new Fyne application
+	myApp := app.New()
+	myWindow := myApp.NewWindow("Download Manager")
 
-	client, err := torrent.NewClient(config)
-	if err != nil {
-		return fmt.Errorf("failed to create torrent client: %w", err)
-	}
-	defer client.Close()
+	// Create UI elements
+	outputDirEntry := widget.NewEntry()
+	outputDirEntry.SetPlaceHolder("Select output directory...")
 
-	t, err := client.AddMagnet(url)
-	if err != nil {
-		return fmt.Errorf("failed to add magnet URL: %w", err)
-	}
+	urlsEntry := widget.NewMultiLineEntry()
+	urlsEntry.SetPlaceHolder("Enter URLs or Magnet Links (one per line)...")
 
-	// Set a reasonable timeout for getting torrent info
-	infoTimeout := 1 * time.Minute
-	select {
-	case <-t.GotInfo():
-	case <-time.After(infoTimeout):
-		return fmt.Errorf("timeout waiting for torrent info after %v", infoTimeout)
-	}
+	// Button to open folder selection dialog
+	selectDirButton := widget.NewButton("Select Directory", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				log.Println("Error selecting directory:", err)
+				return
+			}
+			if uri != nil {
+				outputDirEntry.SetText(uri.Path()) // Set the selected directory path
+			}
+		}, myWindow)
+	})
 
-	t.DownloadAll()
-
-	// Add progress reporting and better completion check
-	downloadStart := time.Now()
-	for !t.Complete().Bool() {
-		stats := t.Stats()
-		progress := float64(stats.BytesRead.Int64()) / float64(t.Length()) * 100
-		speed := float64(stats.BytesRead.Int64()) / time.Since(downloadStart).Seconds() / 1024 / 1024 // MB/xs
-
-		log.Printf("Downloading torrent: %.1f%% complete (%.2f MB/s)", progress, speed)
-
-		// Check if download is stuck
-		if stats.ActivePeers == 0 {
-			return fmt.Errorf("download stalled - no active peers")
+	startButton := widget.NewButton("Start Download", func() {
+		outputDir := outputDirEntry.Text
+		urls := strings.Split(urlsEntry.Text, "\n") // Split URLs by newline
+		if outputDir == "" || len(urls) == 0 {
+			log.Println("Please provide both output directory and at least one URL/magnet link")
+			return
 		}
+		go startDownload(urls, outputDir, myWindow)
+	})
 
-		time.Sleep(2 * time.Second)
-	}
+	// Create a vertical box layout for the UI
+	content := container.NewVBox(
+		widget.NewLabel("Output Directory:"),
+		container.NewHBox(outputDirEntry, selectDirButton),
+		widget.NewLabel("URLs or Magnet Links (one per line):"),
+		urlsEntry,
+		startButton,
+	)
 
-	log.Printf("Torrent download completed in %v", time.Since(downloadStart))
-	return nil
+	// Set the window content and show it
+	myWindow.SetContent(content)
+	myWindow.Resize(fyne.NewSize(600, 400)) // Larger window to accommodate progress bars
+	myWindow.ShowAndRun()
 }
 
-func normalDownload(url, outputDir string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to download %s: %w", url, err)
+func startDownload(urls []string, outputDir string, window fyne.Window) {
+	// Filter out empty URLs
+	var validURLs []string
+	for _, url := range urls {
+		url = strings.TrimSpace(url)
+		if url != "" {
+			validURLs = append(validURLs, url)
+		}
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("received status code %d for %s", resp.StatusCode, url)
+	if len(validURLs) == 0 {
+		log.Println("No valid URLs/magnet links provided")
+		return
 	}
 
-	outPath := filepath.Join(outputDir, filepath.Base(url))
-	out, err := os.Create(outPath)
-	if err != nil {
-		return fmt.Errorf("failed to create file %s: %w", outPath, err)
-	}
-	defer out.Close()
+	log.Println("Starting download...")
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	// Create a container to hold progress bars
+	progressContainer := container.NewVBox()
+
+	// Add progress bars to the window
+	window.SetContent(container.NewVBox(
+		widget.NewLabel("Download Progress:"),
+		progressContainer,
+	))
+
+	// Process URLs with progress bars
+	go processURLs(validURLs, outputDir, progressContainer)
 }
 
-func processURLs(urls []string, outputDir string) {
+func processURLs(urls []string, outputDir string, progressContainer *fyne.Container) {
 	var wg sync.WaitGroup
 	urlChan := make(chan string, len(urls))
 
-	// Start workers
-	for range workers {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for url := range urlChan {
-				// if url is torrent magnet send it to other function
+				// Create a progress bar for this URL
+				progressBar := widget.NewProgressBar()
+				label := widget.NewLabel(url)
+				progressContainer.Add(container.NewVBox(label, progressBar))
+
+				// Check if the URL is a magnet link or HTTP URL
 				if strings.HasPrefix(url, "magnet:") {
-					if err := downloadTorrent(url, outputDir); err != nil {
-						log.Printf("Error downloading torrent: %v", err)
+					// Handle magnet link (torrent download)
+					err := downloadTorrent(url, outputDir, progressBar)
+					if err != nil {
+						log.Printf("Failed to download torrent %s: %v\n", url, err)
+					} else {
+						log.Printf("Downloaded torrent: %s\n", url)
 					}
-					continue
-				}
-				if err := normalDownload(url, outputDir); err != nil {
-					log.Printf("Error: %v", err)
 				} else {
-					log.Printf("Successfully downloaded %s", url)
+					// Handle HTTP download
+					err := downloadFile(url, outputDir, progressBar)
+					if err != nil {
+						log.Printf("Failed to download %s: %v\n", url, err)
+					} else {
+						log.Printf("Downloaded: %s\n", url)
+					}
 				}
 			}
 		}()
 	}
 
-	// Feed URLs to workers
 	for _, url := range urls {
 		urlChan <- url
 	}
 	close(urlChan)
-
 	wg.Wait()
 }
 
-func main() {
-	outputDir := flag.String("o", "", "Output directory")
-	urlsFile := flag.String("u", "", "File containing URLs (one per line)")
-	flag.Parse()
-
-	if *outputDir == "" || *urlsFile == "" {
-		log.Fatal("Both -o and -u flags are required")
+func downloadFile(url string, outputDir string, progressBar *widget.ProgressBar) error {
+	// Create the output directory if it doesn't exist
+	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	if err := os.MkdirAll(*outputDir, 0755); err != nil {
-		log.Fatalf("Failed to create output directory: %v", err)
+	// Get the file name from the URL
+	fileName := filepath.Base(url)
+	if fileName == "" || fileName == "." || fileName == "/" {
+		fileName = "downloaded_file"
 	}
 
-	file, err := os.Open(*urlsFile)
+	// Create the output file
+	outputPath := filepath.Join(outputDir, fileName)
+	file, err := os.Create(outputPath)
 	if err != nil {
-		log.Fatalf("Failed to open URLs file: %v", err)
+		return fmt.Errorf("failed to create file: %v", err)
 	}
 	defer file.Close()
 
-	var urls []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if url := strings.TrimSpace(scanner.Text()); url != "" {
-			urls = append(urls, url)
-		}
+	// Start the HTTP request
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to start download: %v", err)
 	}
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("Failed to read URLs file: %v", err)
+	defer resp.Body.Close()
+
+	// Check if the response is successful
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download: %s", resp.Status)
 	}
 
-	log.Println("Starting download...")
-	processURLs(urls, *outputDir)
-	log.Println("All downloads completed")
+	// Get the total file size
+	fileSize := resp.ContentLength
+	progressBar.Max = float64(fileSize)
+
+	// Download the file and update the progress bar
+	reader := io.TeeReader(resp.Body, &progressWriter{progressBar: progressBar})
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		return fmt.Errorf("failed to save file: %v", err)
+	}
+
+	return nil
+}
+
+func downloadTorrent(magnetLink string, outputDir string, progressBar *widget.ProgressBar) error {
+	// Configure the torrent client with the output directory
+	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.DataDir = outputDir // Set the download directory
+
+	// Create a new torrent client
+	client, err := torrent.NewClient(clientConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create torrent client: %v", err)
+	}
+	defer client.Close()
+
+	// Add the magnet link to the client
+	torrent, err := client.AddMagnet(magnetLink)
+	if err != nil {
+		return fmt.Errorf("failed to add magnet link: %v", err)
+	}
+
+	// Wait for the torrent metadata to be available
+	<-torrent.GotInfo()
+
+	// Start downloading the torrent
+	torrent.DownloadAll()
+
+	// Monitor download progress
+	for {
+		progress := float64(torrent.BytesCompleted()) / float64(torrent.Info().TotalLength())
+		progressBar.SetValue(progress)
+		progressBar.Refresh()
+
+		if torrent.BytesCompleted() == torrent.Info().TotalLength() {
+			break // Download complete
+		}
+
+		time.Sleep(500 * time.Millisecond) // Update progress every 500ms
+	}
+
+	return nil
+}
+
+// progressWriter updates the progress bar as data is written
+type progressWriter struct {
+	progressBar *widget.ProgressBar
+	written     int64
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.written += int64(n)
+	pw.progressBar.SetValue(float64(pw.written))
+	pw.progressBar.Refresh()
+	return n, nil
 }

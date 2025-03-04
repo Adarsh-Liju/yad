@@ -1,72 +1,91 @@
-# YAD
+# Yad
 
-## Overview
+A cross-platform desktop application built with Go and Fyne that allows users to download files from HTTP URLs or magnet links. The application provides a simple and intuitive interface for managing downloads, including progress bars for each download.
 
-The `yad` is a Go program that enables efficient downloading of multiple files simultaneously with built-in rate limiting, retry mechanisms, and progress tracking. This documentation covers the program's architecture, components, and usage.
+---
+
+## Features
+
+- **HTTP Downloads**:
+  - Download files from HTTP URLs.
+  - Progress bars show real-time download progress.
+  - Files are saved to a user-selected directory.
+
+- **Torrent Downloads**:
+  - Download files from magnet links.
+  - Progress bars show real-time torrent download progress.
+  - Files are saved to a user-selected directory.
+
+- **User-Friendly Interface**:
+  - Select the output directory using a folder picker.
+  - Enter multiple URLs or magnet links (one per line).
+  - Start and monitor downloads with progress bars.
+
+- **Concurrent Downloads**:
+  - Supports multiple concurrent downloads (up to 5 workers).
+
+---
 
 ## Installation
 
-To install and run yad:
+> TODO
 
-1. Install directly using Go:
+## Usage
 
-```bash
-go install github.com/Adarsh-Liju/yad@latest
-```
+1. **Select Output Directory**:
+   - Click the "Select Directory" button to choose where downloaded files will be saved.
 
-2. Create a text file containing URLs to download (one per line), for example `urls.txt`:
+2. **Enter URLs or Magnet Links**:
+   - Paste or type URLs or magnet links into the text box, one per line.
 
-```
-https://example.com/file1.pdf
-https://example.com/file2.pdf
-```
+3. **Start Download**:
+   - Click the "Start Download" button to begin downloading files.
+   - Progress bars will appear for each download.
 
-3. Run the program:
+4. **Monitor Progress**:
+   - Watch the progress bars to track the download status.
+   - Downloaded files will be saved in the selected output directory.
 
-```bash
-yad -u urls.txt -o output_directory
-```
+---
 
-Where:
-- `-u`: Path to the file containing URLs
-- `-o`: Directory where downloaded files will be saved
+## Code Structure
 
-The program will create the output directory if it doesn't exist and begin downloading the files in parallel using 5 concurrent workers.
+- **`main.go`**:
+  - Entry point of the application.
+  - Handles UI setup and event handling.
 
-## Implementation
+- **`downloadFile` function**:
+  - Handles HTTP downloads.
+  - Saves files to the output directory and updates the progress bar.
 
-The program works by:
+- **`downloadTorrent` function**:
+  - Handles magnet link downloads using the `anacrolix/torrent` library.
+  - Saves torrent files to the output directory and updates the progress bar.
 
-1. Reading the URLs from the input file
-2. Creating a pool of worker goroutines
-3. Distributing the URLs among the workers
-4. Downloading the files in parallel
-5. Saving the files to the output directory
+- **`progressWriter` struct**:
+  - Updates the progress bar as data is written during HTTP downloads.
 
-## Future Enhancements
+---
 
-The following features are planned for future releases:
+## Dependencies
 
-1. Progress bars for large downloads
-   - Visual download progress tracking
-   - Estimated time remaining
-   - Download speed indicators
+- **[Fyne](https://fyne.io/)**:
+  - A cross-platform GUI framework for Go.
+  - Used to build the user interface.
 
-2. Enhanced parallelization
-   - Configurable number of concurrent downloads
-   - Improved resource utilization
-   - Better handling of system limitations
+- **[Anacrolix Torrent](https://github.com/anacrolix/torrent)**:
+  - A Go library for handling torrent downloads.
+  - Used to download files from magnet links.
 
-3. Customization options
-   - Configurable retry attempts and timeouts
-   - Custom rate limiting thresholds
-   - Output filename templates
-   - Download filters and rules
+---
 
-4. Documentation improvements
-   - API documentation
-   - Configuration guide
-   - Best practices
-   - Performance tuning tips
+## License
 
-Contributions and feature requests are welcome! Please feel free to open issues or submit pull requests on GitHub.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+## Acknowledgments
+
+- **[Fyne](https://fyne.io/)** for providing an easy-to-use GUI framework.
+- **[Anacrolix Torrent](https://github.com/anacrolix/torrent)** for enabling torrent downloads in Go.
