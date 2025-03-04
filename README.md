@@ -30,6 +30,16 @@ A cross-platform desktop application built with Go and Fyne that allows users to
 
 > TODO
 
+## Screenshots
+
+### Main UI
+
+![yad_ui](./yad.png)
+
+### Download UI
+
+![download](./image.png)
+
 ## Usage
 
 1. **Select Output Directory**:
