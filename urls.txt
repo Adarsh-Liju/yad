@@ -1,8 +1,0 @@
-Some sample urls I use for testing
-
-https://getsamplefiles.com/download/pdf/sample-1.pdf
-https://getsamplefiles.com/download/pdf/sample-2.pdf
-https://getsamplefiles.com/download/pdf/sample-3.pdf
-https://getsamplefiles.com/download/pdf/sample-4.pdf
-https://getsamplefiles.com/download/pdf/sample-5.pdf
-magnet:?xt=urn:btih:d984f67af9917b214cd8b6048ab5624c7df6a07a&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce

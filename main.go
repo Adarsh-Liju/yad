@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,155 +13,250 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent"
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
-const workers int = 5
+const (
+	workers        = 5
+	downloadFolder = "./downloads" // Default download location
+)
 
-func main() {
-	// Create a new Fyne application
-	myApp := app.New()
-	myWindow := myApp.NewWindow("Yad - Yet Another Downloader")
-
-	// Create UI elements
-	outputDirEntry := widget.NewEntry()
-	outputDirEntry.SetPlaceHolder("Select output directory...")
-
-	urlsEntry := widget.NewMultiLineEntry()
-	urlsEntry.SetPlaceHolder("Enter URLs or Magnet Links (one per line)...")
-
-	// Button to open folder selection dialog
-	selectDirButton := widget.NewButtonWithIcon("Select Directory", theme.FolderOpenIcon(), func() {
-		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
-			if err != nil {
-				log.Println("Error selecting directory:", err)
-				return
-			}
-			if uri != nil {
-				outputDirEntry.SetText(uri.Path()) // Set the selected directory path
-			}
-		}, myWindow)
-	})
-
-	startButton := widget.NewButtonWithIcon("Start Download", theme.DownloadIcon(), func() {
-		outputDir := outputDirEntry.Text
-		urls := strings.Split(urlsEntry.Text, "\n") // Split URLs by newline
-		if outputDir == "" || len(urls) == 0 {
-			dialog.ShowInformation("Error", "Please provide both output directory and at least one URL/magnet link", myWindow)
-			return
-		}
-		go startDownload(urls, outputDir, myWindow)
-	})
-
-	clearButton := widget.NewButtonWithIcon("Clear", theme.DeleteIcon(), func() {
-		outputDirEntry.SetText("")
-		urlsEntry.SetText("")
-	})
-
-	// Create a status bar
-	statusBar := widget.NewLabel("Ready")
-
-	// Create a vertical box layout for the UI
-	content := container.NewVBox(
-		widget.NewLabelWithStyle("Yad - Yet Another Downloader", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		widget.NewLabel("Output Directory:"),
-		container.NewBorder(nil, nil, nil, selectDirButton, outputDirEntry),
-		widget.NewLabel("URLs or Magnet Links (one per line):"),
-		urlsEntry,
-		container.NewHBox(startButton, clearButton),
-		statusBar,
-	)
-
-	// Set the window content and show it
-	myWindow.SetContent(content)
-	myWindow.Resize(fyne.NewSize(1200, 800)) // Larger window to accommodate progress bars
-	myWindow.ShowAndRun()
+type DownloadRequest struct {
+	URLs      []string `json:"urls"`
+	OutputDir string   `json:"outputDir"`
 }
 
-func startDownload(urls []string, outputDir string, window fyne.Window) {
-	// Filter out empty URLs
+type DownloadStatus struct {
+	URL       string  `json:"url"`
+	Progress  float64 `json:"progress"`
+	Status    string  `json:"status"`
+	FileName  string  `json:"fileName"`
+	Completed bool    `json:"completed"`
+	Error     string  `json:"error,omitempty"`
+}
+
+var (
+	activeDownloads = make(map[string]*DownloadStatus)
+	downloadsMutex  sync.Mutex
+	upgrader        = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins for this example
+		},
+	}
+	clients    = make(map[*websocket.Conn]bool)
+	clientsMux sync.Mutex
+)
+
+func main() {
+	// Create downloads directory if it doesn't exist
+	if err := os.MkdirAll(downloadFolder, os.ModePerm); err != nil {
+		log.Fatalf("Failed to create download directory: %v", err)
+	}
+
+	// Create router
+	r := mux.NewRouter()
+
+	// Serve static files
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+
+	// API endpoints
+	r.HandleFunc("/api/download", handleDownloadRequest).Methods("POST")
+	r.HandleFunc("/api/status", handleGetAllStatus).Methods("GET")
+	r.HandleFunc("/api/ws", handleWebSocket)
+
+	// Serve index.html for the root path
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./static/index.html")
+	})
+
+	// Start server
+	port := "8080"
+	log.Printf("Starting server on port %s...", port)
+	log.Fatal(http.ListenAndServe(":"+port, r))
+}
+
+func handleDownloadRequest(w http.ResponseWriter, r *http.Request) {
+	var req DownloadRequest
+
+	// Parse request
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if len(req.URLs) == 0 {
+		http.Error(w, "No URLs provided", http.StatusBadRequest)
+		return
+	}
+
+	// Use provided output directory or default
+	outputDir := req.OutputDir
+	if outputDir == "" {
+		outputDir = downloadFolder
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create output directory: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Filter empty URLs
 	var validURLs []string
-	for _, url := range urls {
+	for _, url := range req.URLs {
 		url = strings.TrimSpace(url)
 		if url != "" {
 			validURLs = append(validURLs, url)
 		}
 	}
 
-	if len(validURLs) == 0 {
-		dialog.ShowInformation("Error", "No valid URLs/magnet links provided", window)
+	// Start download process in background
+	go processURLs(validURLs, outputDir)
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "started"})
+}
+
+func handleGetAllStatus(w http.ResponseWriter, r *http.Request) {
+	downloadsMutex.Lock()
+	defer downloadsMutex.Unlock()
+
+	// Return all download statuses
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(activeDownloads)
+}
+
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Upgrade the HTTP connection to a WebSocket connection
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Failed to upgrade to WebSocket: %v", err)
 		return
 	}
 
-	log.Println("Starting download...")
+	// Register client
+	clientsMux.Lock()
+	clients[conn] = true
+	clientsMux.Unlock()
 
-	// Create a container to hold progress bars
-	progressContainer := container.NewVBox()
+	// Send current status to new client
+	downloadsMutex.Lock()
+	statusJSON, _ := json.Marshal(activeDownloads)
+	downloadsMutex.Unlock()
+	conn.WriteMessage(websocket.TextMessage, statusJSON)
 
-	// Add progress bars to the window
-	window.SetContent(container.NewVBox(
-		widget.NewLabelWithStyle("Download Progress:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		progressContainer,
-	))
-
-	// Process URLs with progress bars
-	go processURLs(validURLs, outputDir, progressContainer)
+	// Listen for close events
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			clientsMux.Lock()
+			delete(clients, conn)
+			clientsMux.Unlock()
+			break
+		}
+	}
 }
 
-func processURLs(urls []string, outputDir string, progressContainer *fyne.Container) {
+func broadcastStatus() {
+	downloadsMutex.Lock()
+	statusJSON, _ := json.Marshal(activeDownloads)
+	downloadsMutex.Unlock()
+
+	clientsMux.Lock()
+	for client := range clients {
+		err := client.WriteMessage(websocket.TextMessage, statusJSON)
+		if err != nil {
+			client.Close()
+			delete(clients, client)
+		}
+	}
+	clientsMux.Unlock()
+}
+
+func processURLs(urls []string, outputDir string) {
 	var wg sync.WaitGroup
 	urlChan := make(chan string, len(urls))
 
+	// Initialize download status for each URL
+	for _, url := range urls {
+		fileName := filepath.Base(url)
+		if fileName == "" || fileName == "." || fileName == "/" {
+			fileName = "downloaded_file"
+		}
+
+		downloadsMutex.Lock()
+		activeDownloads[url] = &DownloadStatus{
+			URL:       url,
+			Progress:  0,
+			Status:    "queued",
+			FileName:  fileName,
+			Completed: false,
+		}
+		downloadsMutex.Unlock()
+	}
+
+	// Broadcast initial status
+	broadcastStatus()
+
+	// Start worker goroutines
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for url := range urlChan {
-				// Create a progress bar for this URL
-				progressBar := widget.NewProgressBar()
-				label := widget.NewLabel(url)
-				progressContainer.Add(container.NewVBox(label, progressBar))
+				// Update status to "downloading"
+				updateDownloadStatus(url, "downloading", 0, false, "")
 
-				// Check if the URL is a magnet link or HTTP URL
+				var err error
 				if strings.HasPrefix(url, "magnet:") {
-					// Handle magnet link (torrent download)
-					err := downloadTorrent(url, outputDir, progressBar)
-					if err != nil {
-						log.Printf("Failed to download torrent %s: %v\n", url, err)
-					} else {
-						log.Printf("Downloaded torrent: %s\n", url)
-					}
+					// Handle torrent download
+					err = downloadTorrent(url, outputDir)
 				} else {
 					// Handle HTTP download
-					err := downloadFile(url, outputDir, progressBar)
-					if err != nil {
-						log.Printf("Failed to download %s: %v\n", url, err)
-					} else {
-						log.Printf("Downloaded: %s\n", url)
-					}
+					err = downloadFile(url, outputDir)
+				}
+
+				// Update final status
+				if err != nil {
+					log.Printf("Failed to download %s: %v", url, err)
+					updateDownloadStatus(url, "failed", 0, true, err.Error())
+				} else {
+					log.Printf("Downloaded: %s", url)
+					updateDownloadStatus(url, "completed", 100, true, "")
 				}
 			}
 		}()
 	}
 
+	// Send URLs to workers
 	for _, url := range urls {
 		urlChan <- url
 	}
 	close(urlChan)
+
+	// Wait for all downloads to complete
 	wg.Wait()
 }
 
-func downloadFile(url string, outputDir string, progressBar *widget.ProgressBar) error {
-	// Create the output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create output directory: %v", err)
+func updateDownloadStatus(url, status string, progress float64, completed bool, errorMsg string) {
+	downloadsMutex.Lock()
+	if download, exists := activeDownloads[url]; exists {
+		download.Status = status
+		download.Progress = progress
+		download.Completed = completed
+		download.Error = errorMsg
 	}
+	downloadsMutex.Unlock()
 
+	// Broadcast status update to all clients
+	broadcastStatus()
+}
+
+func downloadFile(url string, outputDir string) error {
 	// Get the file name from the URL
 	fileName := filepath.Base(url)
 	if fileName == "" || fileName == "." || fileName == "/" {
@@ -189,11 +285,36 @@ func downloadFile(url string, outputDir string, progressBar *widget.ProgressBar)
 
 	// Get the total file size
 	fileSize := resp.ContentLength
-	progressBar.Max = float64(fileSize)
 
-	// Download the file and update the progress bar
-	reader := io.TeeReader(resp.Body, &progressWriter{progressBar: progressBar})
+	// Set up progress tracking
+	var downloaded int64
+	progressChan := make(chan int64)
+
+	// Start a goroutine to update progress
+	go func() {
+		for bytesDownloaded := range progressChan {
+			downloaded = bytesDownloaded
+			var progress float64
+			if fileSize > 0 {
+				progress = float64(downloaded) / float64(fileSize) * 100
+			} else {
+				progress = -1 // Unknown progress for unknown file size
+			}
+			updateDownloadStatus(url, "downloading", progress, false, "")
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
+	// Create a reader that reports progress
+	reader := &progressReader{
+		Reader:       resp.Body,
+		BytesRead:    0,
+		ProgressChan: progressChan,
+	}
+
+	// Download the file
 	_, err = io.Copy(file, reader)
+	close(progressChan)
 	if err != nil {
 		return fmt.Errorf("failed to save file: %v", err)
 	}
@@ -201,10 +322,10 @@ func downloadFile(url string, outputDir string, progressBar *widget.ProgressBar)
 	return nil
 }
 
-func downloadTorrent(magnetLink string, outputDir string, progressBar *widget.ProgressBar) error {
-	// Configure the torrent client with the output directory
+func downloadTorrent(magnetLink string, outputDir string) error {
+	// Configure the torrent client
 	clientConfig := torrent.NewDefaultClientConfig()
-	clientConfig.DataDir = outputDir // Set the download directory
+	clientConfig.DataDir = outputDir
 
 	// Create a new torrent client
 	client, err := torrent.NewClient(clientConfig)
@@ -213,44 +334,66 @@ func downloadTorrent(magnetLink string, outputDir string, progressBar *widget.Pr
 	}
 	defer client.Close()
 
-	// Add the magnet link to the client
-	torrent, err := client.AddMagnet(magnetLink)
+	// Add the magnet link
+	t, err := client.AddMagnet(magnetLink)
 	if err != nil {
 		return fmt.Errorf("failed to add magnet link: %v", err)
 	}
 
-	// Wait for the torrent metadata to be available
-	<-torrent.GotInfo()
+	// Wait for metadata
+	<-t.GotInfo()
 
-	// Start downloading the torrent
-	torrent.DownloadAll()
+	// Start downloading
+	t.DownloadAll()
 
-	// Monitor download progress
-	for {
-		progress := float64(torrent.BytesCompleted()) / float64(torrent.Info().TotalLength())
-		progressBar.SetValue(progress)
-		progressBar.Refresh()
+	// Monitor progress
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				// Calculate progress
+				info := t.Info()
+				if info != nil {
+					totalLength := float64(info.TotalLength())
+					if totalLength > 0 {
+						progress := float64(t.BytesCompleted()) / totalLength * 100
+						updateDownloadStatus(magnetLink, "downloading", progress, false, "")
+					}
+				}
 
-		if torrent.BytesCompleted() == torrent.Info().TotalLength() {
-			break // Download complete
+				// Check if download is complete
+				if t.Info() != nil && t.BytesCompleted() == t.Info().TotalLength() {
+					close(done)
+					return
+				}
+
+				time.Sleep(1 * time.Second)
+			}
 		}
+	}()
 
-		time.Sleep(500 * time.Millisecond) // Update progress every 500ms
+	// Wait for completion or timeout
+	select {
+	case <-done:
+		return nil
+	case <-time.After(24 * time.Hour): // 24h timeout
+		return fmt.Errorf("download timed out")
 	}
-
-	return nil
 }
 
-// progressWriter updates the progress bar as data is written
-type progressWriter struct {
-	progressBar *widget.ProgressBar
-	written     int64
+// progressReader reports download progress
+type progressReader struct {
+	Reader       io.Reader
+	BytesRead    int64
+	ProgressChan chan int64
 }
 
-func (pw *progressWriter) Write(p []byte) (int, error) {
-	n := len(p)
-	pw.written += int64(n)
-	pw.progressBar.SetValue(float64(pw.written))
-	pw.progressBar.Refresh()
-	return n, nil
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	pr.BytesRead += int64(n)
+	pr.ProgressChan <- pr.BytesRead
+	return n, err
 }
