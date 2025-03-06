@@ -1,95 +1,95 @@
-# Yad
+# Yad - Yet Another Downloader
 
-A cross-platform desktop application built with Go and Fyne that allows users to download files from HTTP URLs or magnet links. The application provides a simple and intuitive interface for managing downloads, including progress bars for each download.
+A lightweight, web-based application for downloading files and torrents with real-time progress tracking.
 
----
+![Yad - Yet Another Downloader](./image.png)
 
 ## Features
 
-- **HTTP Downloads**:
-  - Download files from HTTP URLs.
-  - Progress bars show real-time download progress.
-  - Files are saved to a user-selected directory.
-
-- **Torrent Downloads**:
-  - Download files from magnet links.
-  - Progress bars show real-time torrent download progress.
-  - Files are saved to a user-selected directory.
-
-- **User-Friendly Interface**:
-  - Select the output directory using a folder picker.
-  - Enter multiple URLs or magnet links (one per line).
-  - Start and monitor downloads with progress bars.
-
-- **Concurrent Downloads**:
-  - Supports multiple concurrent downloads (up to 5 workers).
-
----
+- **Multi-format Downloads**: Support for regular file downloads, torrent files, and magnet links
+- **Real-time Progress Tracking**: Live updates via WebSockets
+- **Concurrent Downloads**: Process multiple downloads simultaneously
+- **Custom Output Locations**: Specify where your files should be saved
+- **Simple Web Interface**: Easy-to-use UI accessible from any browser
 
 ## Installation
 
-> TODO
+### Prerequisites
 
-## Screenshots
+- Go 1.18 or higher
+- Git
+- Patience
 
-### Main UI
+### Installing from Source
 
-![yad_ui](./yad_main.png)
+1. Clone the repository:
 
-### Download UI
+```bash
+git clone https://github.com/yourusername/yad.git
+cd yad
+```
 
-![download](./image.png)
+2. Install dependencies:
+
+```bash
+go mod tidy
+```
+
+3. Run the application:
+
+```bash
+go run main.go
+```
+
+4. Open your web browser and navigate to:
+
+```
+http://localhost:8080
+```
 
 ## Usage
+1. Open your web browser and navigate to: `http://localhost:8080`
 
-1. **Select Output Directory**:
-   - Click the "Select Directory" button to choose where downloaded files will be saved.
+2. Enter URLs in the text area (one per line) and click "Add Download"
 
-2. **Enter URLs or Magnet Links**:
-   - Paste or type URLs or magnet links into the text box, one per line.
+3. Monitor download progress in real-time
 
-3. **Start Download**:
-   - Click the "Start Download" button to begin downloading files.
-   - Progress bars will appear for each download.
+4. Access your downloaded files in the `downloads` directory or your specified output directory
 
-4. **Monitor Progress**:
-   - Watch the progress bars to track the download status.
-   - Downloaded files will be saved in the selected output directory.
+## Technical Details
 
----
+### API Endpoints
 
-## Code Structure
+- `POST /api/download` - Add new downloads
+- `GET /api/status` - Get current download status
+- `WS /api/ws` - WebSocket endpoint for real-time updates
 
-- **`main.go`**:
-  - Entry point of the application.
-  - Handles UI setup and event handling.
+### Configuration
 
-- **`downloadFile` function**:
-  - Handles HTTP downloads.
-  - Saves files to the output directory and updates the progress bar.
+Default settings are defined in the source code:
+- Downloads folder: `./downloads`
+- Number of concurrent workers: 5
+- Server port: 8080
 
-- **`downloadTorrent` function**:
-  - Handles magnet link downloads using the `anacrolix/torrent` library.
-  - Saves torrent files to the output directory and updates the progress bar.
+## Accessing Downloaded Files
 
-- **`progressWriter` struct**:
-  - Updates the progress bar as data is written during HTTP downloads.
+Downloaded files are stored in the `downloads` directory by default. You can:
 
----
+1. Navigate to this directory using your file explorer
+2. Specify a custom output directory in the web interface
+3. Access the files directly from your file system
 
-## Dependencies
+## Security Considerations
 
-- **[Fyne](https://fyne.io/)**:
-  - A cross-platform GUI framework for Go.
-  - Used to build the user interface.
+This application is designed for personal or internal use:
+- No built-in authentication
+- No encryption for stored files
+- CORS restrictions are disabled
 
-- **[Anacrolix Torrent](https://github.com/anacrolix/torrent)**:
-  - A Go library for handling torrent downloads.
-  - Used to download files from magnet links.
+## License
 
----
+[MIT License](LICENSE)
 
-## Acknowledgments
+## Contributing
 
-- **[Fyne](https://fyne.io/)** for providing an easy-to-use GUI framework.
-- **[Anacrolix Torrent](https://github.com/anacrolix/torrent)** for enabling torrent downloads in Go.
+Contributions are welcome! Please feel free to submit a Pull Request.
