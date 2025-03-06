@@ -1,432 +1,199 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yad - Yet Another Downloader</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #4a86e8;
-            --secondary-color: #34a853;
-            --error-color: #ea4335;
-            --dark-bg: #f5f5f5;
-            --light-bg: #ffffff;
-            --text-color: #202124;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--dark-bg);
-            color: var(--text-color);
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        header h1 {
-            margin: 0;
-            color: var(--primary-color);
-            font-size: 2.5em;
-        }
-
-        .card {
-            background-color: var(--light-bg);
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        input[type="text"],
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background-color 0.2s;
-        }
-
-        button.primary {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        button.secondary {
-            background-color: #ddd;
-            color: var(--text-color);
-        }
-
-        button:hover {
-            opacity: 0.9;
-        }
-
-        .downloads-list {
-            margin-top: 30px;
-        }
-
-        .download-item {
-            padding: 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .download-item:last-child {
-            border-bottom: none;
-        }
-
-        .download-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .download-title {
-            font-weight: bold;
-            word-break: break-all;
-        }
-
-        .download-status {
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 14px;
-        }
-
-        .status-queued {
-            background-color: #f1f1f1;
-        }
-
-        .status-downloading {
-            background-color: #ffeb3b;
-            color: #333;
-        }
-
-        .status-completed {
-            background-color: var(--secondary-color);
-            color: white;
-        }
-
-        .status-failed {
-            background-color: var(--error-color);
-            color: white;
-        }
-
-        .progress-container {
-            height: 10px;
-            background-color: #eee;
-            border-radius: 5px;
-            overflow: hidden;
-            margin-top: 10px;
-        }
-
+        /* Custom styles that aren't easily replaced with Tailwind */
         .progress-bar {
-            height: 100%;
-            background-color: var(--primary-color);
-            width: 0%;
-            transition: width 0.5s;
-        }
-
-        .error-message {
-            margin-top: 5px;
-            color: var(--error-color);
-            font-size: 14px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-
-        .notification {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background-color: var(--secondary-color);
-            color: white;
-            border-radius: 4px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            transform: translateY(100px);
-            opacity: 0;
-            transition: transform 0.3s, opacity 0.3s;
-        }
-
-        .notification.show {
-            transform: translateY(0);
-            opacity: 1;
+            transition: width 0.5s ease-in-out;
         }
     </style>
 </head>
-
-<body>
-    <div class="container">
-        <header>
-            <h1><i class="fas fa-download"></i> Yad - Yet Another Downloader</h1>
-            <p>Simple web-based downloader for HTTP URLs and Magnet links</p>
+<body class="min-h-screen bg-gray-100 text-gray-700">
+    <div class="container max-w-3xl mx-auto px-4 py-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-indigo-700">
+                <i class="fas fa-cloud-download-alt mr-2"></i>Yad - Yet Another Downloader
+            </h1>
+            <p class="text-gray-600 mt-2">Download any file or torrent with ease</p>
         </header>
 
-        <div class="card">
-            <div class="form-group">
-                <label for="outputDir">Output Directory:</label>
-                <input type="text" id="outputDir" placeholder="Leave blank for default downloads folder">
-            </div>
-
-            <div class="form-group">
-                <label for="urls">URLs or Magnet Links (one per line):</label>
-                <textarea id="urls" placeholder="Enter URLs or Magnet Links (one per line)..."></textarea>
-            </div>
-
-            <div class="button-group">
-                <button id="startButton" class="primary">
-                    <i class="fas fa-download"></i> Start Download
-                </button>
-                <button id="clearButton" class="secondary">
-                    <i class="fas fa-trash"></i> Clear
-                </button>
-            </div>
+        <div class="bg-white rounded-lg shadow p-6 mb-6 border border-gray-200">
+            <h2 class="text-xl font-semibold mb-4">Add New Download</h2>
+            <form id="download-form">
+                <textarea id="urls" rows="3" placeholder="Enter URLs (one per line)" required
+                    class="w-full p-2 border border-gray-300 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"></textarea>
+                <input type="text" id="outputDir" placeholder="Output Directory (optional)"
+                    class="w-full p-2 border border-gray-300 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded transition duration-200 w-full md:w-auto">Add Download</button>
+            </form>
         </div>
 
-        <h2>Downloads</h2>
-        <div class="card downloads-list" id="downloadsList">
-            <div class="empty-state">
-                <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i>
-                <p>No downloads yet. Add URLs above to begin.</p>
-            </div>
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Download Queue</h2>
+        <div id="download-list" class="bg-white rounded-lg shadow p-6 border border-gray-200">
+            <p class="text-gray-600">Loading downloads...</p>
         </div>
     </div>
 
-    <div class="notification" id="notification"></div>
-
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const outputDirInput = document.getElementById('outputDir');
-            const urlsTextarea = document.getElementById('urls');
-            const startButton = document.getElementById('startButton');
-            const clearButton = document.getElementById('clearButton');
-            const downloadsList = document.getElementById('downloadsList');
-            const notification = document.getElementById('notification');
+        // DOM elements
+        const downloadForm = document.getElementById('download-form');
+        const urlsInput = document.getElementById('urls');
+        const outputDirInput = document.getElementById('outputDir');
+        const downloadList = document.getElementById('download-list');
 
-            let activeDownloads = {};
-            let ws;
+        // WebSocket connection
+        let socket = null;
 
-            // Connect to WebSocket
-            function connectWebSocket() {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
 
-                ws.onopen = function () {
-                    console.log('WebSocket connection established');
-                };
+            socket = new WebSocket(wsUrl);
 
-                ws.onmessage = function (event) {
-                    const data = JSON.parse(event.data);
-                    updateDownloadsList(data);
-                };
+            socket.onopen = function() {
+                console.log('WebSocket connected');
+            };
 
-                ws.onclose = function () {
-                    console.log('WebSocket connection closed');
-                    // Try to reconnect after a delay
-                    setTimeout(connectWebSocket, 3000);
-                };
+            socket.onmessage = function(event) {
+                const downloads = JSON.parse(event.data);
+                updateDownloadList(downloads);
+            };
 
-                ws.onerror = function (error) {
-                    console.error('WebSocket error:', error);
-                };
+            socket.onclose = function() {
+                console.log('WebSocket disconnected. Reconnecting in 5 seconds...');
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                socket.close();
+            };
+        }
+
+        // Update download list in the UI
+        function updateDownloadList(downloads) {
+            // If no downloads, show message
+            if (Object.keys(downloads).length === 0) {
+                downloadList.innerHTML = '<p class="text-gray-600">No active downloads</p>';
+                return;
             }
 
-            // Start WebSocket connection
-            connectWebSocket();
+            let html = '';
 
-            // Event Listeners
-            startButton.addEventListener('click', function () {
-                const urls = urlsTextarea.value.trim().split('\n').filter(url => url.trim() !== '');
-                const outputDir = outputDirInput.value.trim();
+            for (const url in downloads) {
+                const download = downloads[url];
+                const progressWidth = download.progress >= 0 ? `${download.progress}%` : '0%';
 
-                if (urls.length === 0) {
-                    showNotification('Please enter at least one URL or magnet link', 'error');
-                    return;
+                let statusClass = 'text-blue-500';
+                if (download.status === 'completed') statusClass = 'text-green-500';
+                if (download.status === 'failed') statusClass = 'text-red-500';
+                if (download.status === 'queued') statusClass = 'text-yellow-500';
+
+                html += `
+                <div class="py-4 border-b border-gray-200 last:border-0">
+                    <div class="flex justify-between items-center mb-2">
+                        <div>
+                            <div class="font-semibold">${download.fileName}</div>
+                            <div class="text-sm text-gray-600 truncate max-w-md">${url}</div>
+                        </div>
+                        <div class="text-sm ${statusClass}">${download.status}</div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div class="bg-indigo-600 h-full progress-bar" style="width: ${progressWidth}"></div>
+                    </div>
+                    <div class="text-sm text-gray-600 mt-2">
+                        ${download.progress >= 0 ? `${download.progress.toFixed(1)}%` : 'Calculating...'}
+                        ${download.error ? `<div class="text-red-500 mt-2">${download.error}</div>` : ''}
+                    </div>
+                </div>
+                `;
+            }
+
+            downloadList.innerHTML = html;
+        }
+
+        // Submit form to add new download
+        downloadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Get input values
+            const urlsText = urlsInput.value.trim();
+            const outputDir = outputDirInput.value.trim();
+
+            if (!urlsText) {
+                alert('Please enter at least one URL');
+                return;
+            }
+
+            // Split URLs by line
+            const urls = urlsText.split('\n').filter(url => url.trim() !== '');
+
+            // Create request body
+            const requestBody = {
+                urls: urls,
+                outputDir: outputDir
+            };
+
+            // Send request to API
+            fetch('/api/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status} ${response.statusText}`);
                 }
-
-                startDownload(urls, outputDir);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Download started:', data);
+                urlsInput.value = '';
+                // Optional: Clear output dir as well
+                // outputDirInput.value = '';
+            })
+            .catch(error => {
+                console.error('Error adding download:', error);
+                alert('Failed to add download: ' + error.message);
             });
+        });
 
-            clearButton.addEventListener('click', function () {
-                outputDirInput.value = '';
-                urlsTextarea.value = '';
-            });
-
-            // Start download
-            function startDownload(urls, outputDir) {
-                fetch('/api/download', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        urls: urls,
-                        outputDir: outputDir
-                    })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        showNotification('Download started');
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showNotification('Failed to start download', 'error');
-                    });
-            }
-
-            // Update downloads list
-            function updateDownloadsList(data) {
-                activeDownloads = data;
-
-                // Clear the list
-                if (Object.keys(activeDownloads).length > 0) {
-                    downloadsList.innerHTML = '';
-                } else {
-                    downloadsList.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 20px;"></i>
-                            <p>No downloads yet. Add URLs above to begin.</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Sort downloads - completed at bottom, others by URL
-                const sortedUrls = Object.keys(activeDownloads).sort((a, b) => {
-                    const statusA = activeDownloads[a].completed;
-                    const statusB = activeDownloads[b].completed;
-
-                    if (statusA === statusB) {
-                        return a.localeCompare(b);
-                    }
-
-                    return statusA ? 1 : -1;
-                });
-
-                // Add each download to the list
-                sortedUrls.forEach(url => {
-                    const download = activeDownloads[url];
-                    const item = document.createElement('div');
-                    item.className = 'download-item';
-
-                    // Determine status class
-                    let statusClass = '';
-                    switch (download.status) {
-                        case 'queued':
-                            statusClass = 'status-queued';
-                            break;
-                        case 'downloading':
-                            statusClass = 'status-downloading';
-                            break;
-                        case 'completed':
-                            statusClass = 'status-completed';
-                            break;
-                        case 'failed':
-                            statusClass = 'status-failed';
-                            break;
-                    }
-
-                    // Create item HTML
-                    item.innerHTML = `
-                        <div class="download-header">
-                            <div class="download-title">${download.fileName}</div>
-                            <div class="download-status ${statusClass}">${download.status}</div>
-                        </div>
-                        <div class="download-url">${url}</div>
-                        <div class="progress-container">
-                            <div class="progress-bar" style="width: ${download.progress}%"></div>
-                        </div>
-                        ${download.error ? `<div class="error-message">${download.error}</div>` : ''}
-                    `;
-
-                    downloadsList.appendChild(item);
-                });
-
-                // Check for newly completed downloads
-                for (const url in activeDownloads) {
-                    const download = activeDownloads[url];
-                    if (download.status === 'completed' && download._notified !== true) {
-                        download._notified = true;
-                        showNotification(`Download completed: ${download.fileName}`);
-                    }
-                }
-            }
-
-            // Show notification
-            function showNotification(message, type = 'success') {
-                notification.textContent = message;
-                notification.className = 'notification show';
-
-                if (type === 'error') {
-                    notification.style.backgroundColor = 'var(--error-color)';
-                } else {
-                    notification.style.backgroundColor = 'var(--secondary-color)';
-                }
-
-                setTimeout(() => {
-                    notification.className = 'notification';
-                }, 3000);
-            }
-
-            // Initial load of download status
+        // Fallback to polling if WebSocket fails
+        function pollDownloadStatus() {
             fetch('/api/status')
                 .then(response => response.json())
-                .then(data => {
-                    updateDownloadsList(data);
+                .then(downloads => {
+                    updateDownloadList(downloads);
                 })
                 .catch(error => {
-                    console.error('Error fetching download status:', error);
+                    console.error('Error polling status:', error);
+                })
+                .finally(() => {
+                    setTimeout(pollDownloadStatus, 3000);
                 });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Try WebSocket first
+            connectWebSocket();
+
+            // Fallback to polling after a delay if WebSocket doesn't connect
+            setTimeout(() => {
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
+                    console.log('WebSocket not connected, falling back to polling');
+                    pollDownloadStatus();
+                }
+            }, 3000);
         });
     </script>
 </body>
-
 </html>
